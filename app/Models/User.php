@@ -2,15 +2,13 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Foundation\Auth\User as Authenticatable;
-use Illuminate\Notifications\Notifiable;
+use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
 
-class User extends Authenticatable
+class User extends Model
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable;
 
     /**
      * The attributes that are mass assignable.
@@ -18,19 +16,10 @@ class User extends Authenticatable
      * @var list<string>
      */
     protected $fillable = [
-        'name',
-        'email',
-        'password',
-    ];
-
-    /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var list<string>
-     */
-    protected $hidden = [
-        'password',
-        'remember_token',
+        'username',
+        'phone',
+        'token',
+        'token_expires_at'
     ];
 
     /**
@@ -41,8 +30,49 @@ class User extends Authenticatable
     protected function casts(): array
     {
         return [
-            'email_verified_at' => 'datetime',
-            'password' => 'hashed',
+            'token_expires_at' => 'datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::creating(function (User $user) {
+            $user->token = $user->generateToken();
+            $user->token_expires_at = $user->generateTokenExpiredDate();
+        });
+    }
+
+    public static function findByValidToken(string $token): ?self
+    {
+        return self::query()
+            ->where('token', $token)
+            ->where('token_expires_at', '>', now())
+            ->first();
+    }
+
+    protected function generateToken(): string
+    {
+        return Str::random(40);
+    }
+
+    protected function generateTokenExpiredDate(): string
+    {
+        return Carbon::now()->addDays(7);
+    }
+
+    public function resetToken(): void
+    {
+        $this->token = $this->generateToken();
+        $this->token_expires_at = $this->generateTokenExpiredDate();
+    }
+
+    public function deactivateToken(): void
+    {
+        $this->token_expires_at = Carbon::now();
+    }
+
+    public function histories(): HasMany
+    {
+        return $this->hasMany(History::class);
     }
 }
